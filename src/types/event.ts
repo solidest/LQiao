@@ -5,7 +5,10 @@ export type AgentEvent =
   | 'onStep'
   | 'onToolCall'
   | 'onToolResult'
-  | 'onError';
+  | 'onError'
+  | 'onSkillLoaded'
+  | 'onSkillEnabled'
+  | 'onSkillDisabled';
 
 /** Event name constants (runtime-safe) */
 export const AGENT_EVENTS = {
@@ -15,6 +18,9 @@ export const AGENT_EVENTS = {
   ON_TOOL_CALL: 'onToolCall',
   ON_TOOL_RESULT: 'onToolResult',
   ON_ERROR: 'onError',
+  ON_SKILL_LOADED: 'onSkillLoaded',
+  ON_SKILL_ENABLED: 'onSkillEnabled',
+  ON_SKILL_DISABLED: 'onSkillDisabled',
 } as const;
 
 /** Event handler function */
