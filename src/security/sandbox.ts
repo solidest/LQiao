@@ -76,6 +76,7 @@ export class Sandbox {
 
     return script.runInNewContext(context, {
       timeout: this.#config.timeout,
+      microtaskMode: 'afterEvaluate',
     });
   }
 

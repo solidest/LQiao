@@ -35,7 +35,7 @@ export class FileTool extends ToolBase {
         }
 
       case 'write':
-        if (content === undefined) {
+        if (content == null) {
           return { success: false, error: 'Write requires content' };
         }
         try {

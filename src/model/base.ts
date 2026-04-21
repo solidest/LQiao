@@ -1,4 +1,4 @@
-import type { ModelProviderConfig, GenerateOptions, ModelResponse, StreamChunk } from '../types/model';
+import type { GenerateOptions, ModelResponse, StreamChunk } from '../types/model';
 
 /**
  * Abstract model provider base class.
@@ -22,9 +22,4 @@ export abstract class BaseModel {
 
   /** Stream a response from the model as an async iterable */
   abstract stream(prompt: string, options?: GenerateOptions): AsyncIterable<StreamChunk>;
-
-  /** Create a model instance from provider config */
-  static fromConfig(config: ModelProviderConfig & { apiKey: string; model: string }): BaseModel {
-    throw new Error('Use a concrete model provider subclass');
-  }
 }

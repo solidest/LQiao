@@ -32,11 +32,6 @@ export abstract class ToolBase implements Tool {
     }
   }
 
-  /** Run an action through sandbox validation if available */
-  protected withSandbox<T>(action: () => T): T {
-    return action();
-  }
-
   get sandbox(): Sandbox | undefined {
     return this.#sandbox;
   }

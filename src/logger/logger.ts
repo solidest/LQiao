@@ -39,7 +39,12 @@ export class Logger {
       this.#entries.push(entry);
       // Also output to console in verbose mode
       if (this.#verbose) {
-        console.log(JSON.stringify(entry));
+        const output = JSON.stringify(entry);
+        switch (level) {
+          case 'warn': console.warn(output); break;
+          case 'error': console.error(output); break;
+          default: console.log(output);
+        }
       }
     }
   }
