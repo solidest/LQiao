@@ -2,8 +2,10 @@ import type { Tool } from '../types/tool';
 import type { GenerateOptions, ModelResponse } from '../types/model';
 import type { EventBus } from '../types/event';
 import type { Sandbox } from '../security/sandbox';
+import type { BranchRule } from './branch-engine';
 import { ERROR_TYPES, LQiaoError } from '../types/error';
 import { withRetry } from '../utils/retry';
+import { evaluateBranch } from './branch-engine';
 
 /** Parsed action from model output */
 interface ParsedAction {
@@ -111,6 +113,85 @@ export class ReactAgent {
             ? JSON.stringify(result.data)
             : result.error ?? 'Unknown error';
           history.push(`Observation: ${observation}`);
+          prompt += `\n\n${response.text}\nObservation: ${observation}`;
+          this.#eventBus?.emit('onToolResult', { tool: parsed.action, result });
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          history.push(`Observation: Error — ${msg}`);
+          prompt += `\n\n${response.text}\nObservation: Error — ${msg}`;
+          this.#eventBus?.emit('onError', { tool: parsed.action, error: msg });
+        }
+      }
+    }
+
+    throw new LQiaoError(
+      ERROR_TYPES.MAX_STEPS,
+      `Exceeded maximum steps (${this.#maxSteps})`,
+    );
+  }
+
+  /**
+   * Run with conditional branching — tool results determine which steps to take next.
+   * @param generate Model generation function
+   * @param task The task/prompt
+   * @param branches Branch rules evaluated after each tool call
+   */
+  async runWithBranches(
+    generate: (prompt: string, options?: GenerateOptions) => Promise<ModelResponse>,
+    task: string,
+    branches: BranchRule[],
+  ): Promise<string> {
+    const history: string[] = [];
+    const toolsDesc = Array.from(this.#tools.values())
+      .map((t) => `- ${t.name}: ${t.description}`)
+      .join('\n');
+
+    let prompt = DEFAULT_REACT_PROMPT.replace('{{TOOLS}}', toolsDesc).replace('{{TASK}}', task);
+
+    for (let step = 0; step < this.#maxSteps; step++) {
+      this.#eventBus?.emit('onStep', { step, prompt });
+
+      const response = await withRetry(
+        () => generate(this.#truncate(prompt)),
+        { maxRetries: this.#maxRetries },
+      );
+
+      const parsed = this.#parseResponse(response.text);
+      history.push(response.text);
+
+      if (parsed.finalAnswer) {
+        this.#eventBus?.emit('afterRun', { answer: parsed.finalAnswer, steps: step + 1 });
+        return parsed.finalAnswer;
+      }
+
+      if (parsed.action) {
+        const tool = this.#tools.get(parsed.action);
+        if (!tool) {
+          history.push(`Observation: Tool "${parsed.action}" not found`);
+          prompt += `\n\n${response.text}\nObservation: Tool "${parsed.action}" not found`;
+          continue;
+        }
+
+        this.#eventBus?.emit('onToolCall', { tool: parsed.action, args: parsed.args });
+
+        try {
+          const result = await tool.execute(
+            ...(parsed.args ? [parsed.args] : []),
+          );
+          const observation = result.success
+            ? JSON.stringify(result.data)
+            : result.error ?? 'Unknown error';
+          history.push(`Observation: ${observation}`);
+
+          // Evaluate branch rules and inject conditional steps
+          if (branches.length > 0) {
+            const decision = evaluateBranch(branches, result);
+            if (decision.steps.length > 0) {
+              prompt += `\n\nBranch condition ${decision.matched ? 'matched' : 'not met'}. ` +
+                `Suggested steps: ${decision.steps.join(', ')}`;
+            }
+          }
+
           prompt += `\n\n${response.text}\nObservation: ${observation}`;
           this.#eventBus?.emit('onToolResult', { tool: parsed.action, result });
         } catch (e) {

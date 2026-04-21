@@ -13,6 +13,8 @@ export { Agent } from './core/agent';
 export { DefaultEventBus, AGENT_EVENTS } from './core/event-bus';
 export { ReactAgent } from './core/react-agent';
 export { CodeAgent } from './core/code-agent';
+export { evaluateBranch } from './core/branch-engine';
+export type { Condition, BranchRule, BranchDecision } from './core/branch-engine';
 
 // Model
 export { BaseModel } from './model/base';
@@ -31,7 +33,7 @@ export { Sandbox } from './security/sandbox';
 export { PermissionManager } from './security/permissions';
 export type { PermissionRule } from './security/permissions';
 export { AuditLog } from './security/audit';
-export type { AuditEntry } from './security/audit';
+export type { AuditEntry, AuditSummary } from './security/audit';
 
 // Logger
 export { Logger } from './logger/logger';
