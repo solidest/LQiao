@@ -16,7 +16,7 @@ vi.mock('simple-git', () => ({
 
 describe('GitTool', () => {
   beforeEach(() => {
-    vi.clearAllMocks();
+    Object.values(mockGit).forEach((fn) => fn.mockReset());
   });
 
   describe('add', () => {
@@ -123,6 +123,35 @@ describe('GitTool', () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toContain('Unknown git action');
+    });
+  });
+
+  describe('numeric-key args (LLM format)', () => {
+    it('should map {0: "log", 1: count} to correct params', async () => {
+      mockGit.log.mockResolvedValue({ all: [], latest: null });
+      const tool = new GitTool();
+      await tool.execute({ 0: 'log', 1: 5 });
+
+      expect(mockGit.log).toHaveBeenCalledWith({ n: 5 });
+    });
+
+    it('should map {0: "diff", 1: file} to correct params', async () => {
+      mockGit.diff.mockResolvedValue('');
+      const tool = new GitTool();
+      await tool.execute({ 0: 'diff', 1: 'src/main.ts' });
+
+      expect(mockGit.diff).toHaveBeenCalledWith(['--', 'src/main.ts']);
+    });
+
+    it('should map {0: "commit", 1: message, 2: author} to correct params', async () => {
+      mockGit.commit.mockResolvedValue({});
+      const tool = new GitTool();
+      await tool.execute({ 0: 'commit', 1: 'fix bug', 2: 'User <u@e.com>' });
+
+      expect(mockGit.commit).toHaveBeenCalledWith(
+        ['-m', 'fix bug'],
+        { '--author': 'User <u@e.com>' },
+      );
     });
   });
 

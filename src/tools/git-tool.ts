@@ -157,6 +157,23 @@ export class GitTool extends ToolBase {
   }
 }
 
+/** Map numeric keys from LLM to named params for actions that need them */
+function mapNumericArgs(action: string, obj: Record<string, unknown>): Record<string, unknown> {
+  const rest = Object.fromEntries(Object.entries(obj).filter(([k]) => k !== '0'));
+  switch (action.toLowerCase()) {
+    case 'log':
+      return { count: '1' in rest ? rest['1'] : undefined, file: '2' in rest ? rest['2'] : undefined };
+    case 'diff':
+      return { file: '1' in rest ? rest['1'] : undefined, revision: '2' in rest ? rest['2'] : undefined };
+    case 'commit':
+      return { message: '1' in rest ? rest['1'] : undefined, author: '2' in rest ? rest['2'] : undefined };
+    case 'push':
+      return { remote: '1' in rest ? rest['1'] : undefined, branch: '2' in rest ? rest['2'] : undefined };
+    default:
+      return rest;
+  }
+}
+
 /** Extract action and parameters from args (supports object or positional args) */
 function extractArgs(args: unknown[]): { action: string } & Record<string, unknown> {
   if (args.length === 0) {
@@ -170,11 +187,10 @@ function extractArgs(args: unknown[]): { action: string } & Record<string, unkno
       const { action, ...rest } = obj;
       return { action, ...rest };
     }
-    // Numeric-key format from LLM
-    return {
-      action: (obj['0'] as string) ?? '',
-      ...Object.fromEntries(Object.entries(obj).filter(([k]) => k !== '0')),
-    };
+    // Numeric-key format from LLM: {0: 'action', 1: 'arg', 2: 'arg2'}
+    const act = (obj['0'] as string) ?? '';
+    const mapped = mapNumericArgs(act, obj);
+    return { action: act, ...mapped };
   }
 
   // Positional: action, arg2, arg3...
