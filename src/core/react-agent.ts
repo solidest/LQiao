@@ -150,7 +150,7 @@ export class ReactAgent {
     const actionMatch = text.match(/Action:\s*(.+?)(?=\n|$)/i);
     if (actionMatch) result.action = actionMatch[1].trim();
 
-    const inputMatch = text.match(/Action Input:\s*(.+?)(?=\n|$)/i);
+    const inputMatch = text.match(/Action Input:\s*(.+)$/im);
     if (inputMatch) {
       try {
         result.args = JSON.parse(inputMatch[1].trim());

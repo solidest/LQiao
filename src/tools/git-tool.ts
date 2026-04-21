@@ -18,18 +18,19 @@ export class GitTool extends ToolBase {
     this.#git = simpleGit(cwd);
   }
 
-  protected async doExecute(action: string, ...args: unknown[]): Promise<ToolResult> {
+  protected async doExecute(...args: unknown[]): Promise<ToolResult> {
+    const { action, ...rest } = extractArgs(args);
     const act = action.toLowerCase();
 
     switch (act) {
       case 'add':
-        return this.#doAdd(args as string[]);
+        return this.#doAdd((rest.paths as string[]) ?? []);
 
       case 'commit':
-        return this.#doCommit(args[0] as string, args[1] as string | undefined);
+        return this.#doCommit(rest.message as string, rest.author as string | undefined);
 
       case 'push':
-        return this.#doPush(args[0] as string | undefined, args[1] as string | undefined);
+        return this.#doPush(rest.remote as string | undefined, rest.branch as string | undefined);
 
       default:
         return { success: false, error: `Unknown git action: ${action}. Use add/commit/push.` };
@@ -71,5 +72,39 @@ export class GitTool extends ToolBase {
     } catch (e) {
       return { success: false, error: `Git push failed: ${e}` };
     }
+  }
+}
+
+/** Extract action and parameters from args (supports object or positional args) */
+function extractArgs(args: unknown[]): { action: string } & Record<string, unknown> {
+  if (args.length === 0) {
+    return { action: '' };
+  }
+
+  const first = args[0];
+  if (typeof first === 'object' && first !== null) {
+    const obj = first as Record<string, unknown>;
+    if ('action' in obj && typeof obj.action === 'string') {
+      const { action, ...rest } = obj;
+      return { action, ...rest };
+    }
+    // Numeric-key format from LLM
+    return {
+      action: (obj['0'] as string) ?? '',
+      ...Object.fromEntries(Object.entries(obj).filter(([k]) => k !== '0')),
+    };
+  }
+
+  // Positional: action, arg2, arg3...
+  const action = args[0] as string;
+  switch (action.toLowerCase()) {
+    case 'add':
+      return { action, paths: Array.isArray(args[1]) ? args[1] : [args[1]].filter(Boolean) as string[] };
+    case 'commit':
+      return { action, message: args[1], author: args[2] };
+    case 'push':
+      return { action, remote: args[1], branch: args[2] };
+    default:
+      return { action, extra: args.slice(1) };
   }
 }
