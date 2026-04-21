@@ -2,6 +2,9 @@ import type { ModelProviderConfig } from '../types/model';
 import type { BaseModel } from './base';
 import { OpenAIModel } from './openai';
 import { AnthropicModel } from './anthropic';
+import { DashScopeModel } from './dashscope';
+import { DeepSeekModel } from './deepseek';
+import { OllamaModel } from './ollama';
 
 type ModelFactory = (config: { apiKey: string; model: string; baseUrl?: string }) => BaseModel;
 
@@ -56,6 +59,12 @@ modelRegistry.registerProvider('gpt', { provider: 'openai' });
 modelRegistry.registerProvider('o1', { provider: 'openai' });
 modelRegistry.registerProvider('o3', { provider: 'openai' });
 modelRegistry.registerProvider('claude', { provider: 'anthropic' });
+modelRegistry.registerProvider('qwen', { provider: 'dashscope', baseUrl: DashScopeModel.baseUrl });
+modelRegistry.registerProvider('deepseek', { provider: 'deepseek', baseUrl: DeepSeekModel.baseUrl });
+modelRegistry.registerProvider('ollama', { provider: 'ollama', baseUrl: 'http://localhost:11434' });
 
 modelRegistry.registerFactory('openai', (cfg) => new OpenAIModel(cfg));
 modelRegistry.registerFactory('anthropic', (cfg) => new AnthropicModel(cfg));
+modelRegistry.registerFactory('dashscope', (cfg) => new DashScopeModel(cfg));
+modelRegistry.registerFactory('deepseek', (cfg) => new DeepSeekModel(cfg));
+modelRegistry.registerFactory('ollama', (cfg) => new OllamaModel(cfg));

@@ -22,6 +22,9 @@ export { BaseModel } from './model/base';
 export { ModelRegistry, modelRegistry } from './model/registry';
 export { OpenAIModel } from './model/openai';
 export { AnthropicModel } from './model/anthropic';
+export { DashScopeModel } from './model/dashscope';
+export { DeepSeekModel } from './model/deepseek';
+export { OllamaModel } from './model/ollama';
 
 // Tools
 export { ToolBase } from './tools/base';
