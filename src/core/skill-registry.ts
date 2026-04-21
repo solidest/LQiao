@@ -81,7 +81,7 @@ export class SkillRegistry {
   getEnabledPrompts(): string {
     return Array.from(this.#skills.values())
       .filter((s) => s.enabled)
-      .map((s) => s.prompt)
+      .map((s) => `--- Skill: ${s.name} ---\n${s.prompt}`)
       .join('\n\n');
   }
 }

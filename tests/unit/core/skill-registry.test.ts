@@ -6,12 +6,14 @@ function createEventBusSpies() {
 
 import { SkillRegistry } from '../../../src/core/skill-registry';
 
-function createSkill(name: string) {
+function createSkill(name: string, extra?: Partial<ReturnType<typeof createSkill>>) {
   return {
     name,
     description: `Description for ${name}`,
     prompt: `Prompt for ${name}`,
     enabled: true,
+    tools: [] as Array<{ name: string; description: string; execute: ReturnType<typeof vi.fn> }>,
+    ...extra,
   };
 }
 
@@ -170,5 +172,21 @@ describe('SkillRegistry', () => {
     freshRegistry.register('/path/to/skill.json');
 
     expect(freshRegistry.get('file-skill')).toBeDefined();
+  });
+
+  it('should include skill name separator in prompts', () => {
+    registry.register(createSkill('a'));
+    registry.register(createSkill('b'));
+
+    const prompts = registry.getEnabledPrompts();
+
+    expect(prompts).toContain('--- Skill: a ---');
+    expect(prompts).toContain('--- Skill: b ---');
+  });
+
+  it('should return empty tools array for skill without tools', () => {
+    registry.register(createSkill('no-tools'));
+
+    expect(registry.get('no-tools')?.tools).toEqual([]);
   });
 });

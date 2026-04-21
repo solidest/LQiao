@@ -155,4 +155,12 @@ describe('SkillLoader', () => {
     expect(skills[0].tools).toHaveLength(1);
     expect(skills[0].tools[0].name).toBe('test-tool');
   });
+
+  it('should throw with file path context when JSON is invalid', () => {
+    mockExistsSync.mockReturnValue(true);
+    mockReadFileSync.mockReturnValue('{ invalid json }');
+
+    expect(() => loadSkills(['/bad/skill.json']))
+      .toThrow('Invalid JSON in skill file: /bad/skill.json');
+  });
 });

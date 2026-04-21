@@ -4,7 +4,7 @@ import type { GenerateOptions, ModelResponse, StreamChunk } from '../types/model
 import type { EventHandler } from '../types/event';
 import type { Sandbox } from '../security/sandbox';
 import type { MCPClient } from '../mcp/client';
-import type { SkillConfig } from '../types/skill';
+import type { SkillConfig, Skill } from '../types/skill';
 import { DefaultEventBus } from './event-bus';
 import { ReactAgent } from './react-agent';
 import { modelRegistry } from '../model/registry';
@@ -31,6 +31,7 @@ export class Agent {
   #mcpClients: MCPClient[] = [];
   #mcpInitialized = false;
   #skills: SkillRegistry;
+  #skillToolNames: Map<string, Set<string>> = new Map();
 
   constructor(config: AgentConfig) {
     this.#config = {
@@ -48,8 +49,11 @@ export class Agent {
     this.#eventBus = new DefaultEventBus();
     this.#skills = new SkillRegistry(this.#eventBus);
 
-    for (const skill of this.#config.skills ?? []) {
+    for (const skill of this.#config.skills!) {
       this.#skills.register(skill);
+      if (skill.enabled ?? true) {
+        this.#skillToolNames.set(skill.name, new Set(skill.tools?.map((t) => t.name) ?? []));
+      }
     }
 
     const skillTools = this.#skills.getEnabledTools();
@@ -177,13 +181,21 @@ export class Agent {
   /** Register a new skill at runtime */
   addSkill(config: SkillConfig): void {
     this.#skills.register(config);
-    this.#config.tools.push(...this.#skills.get(config.name)?.tools ?? []);
+    const skill = this.#skills.get(config.name);
+    if (skill) {
+      this.#skillToolNames.set(config.name, new Set(skill.tools.map((t) => t.name)));
+      this.#config.tools.push(...skill.tools);
+    }
   }
 
-  /** Remove a skill by name */
+  /** Remove a skill and its tools by name */
   removeSkill(name: string): void {
+    const toolNames = this.#skillToolNames.get(name);
     this.#skills.remove(name);
-    this.#config.tools = this.#config.tools.filter((t) => t.name !== name);
+    this.#skillToolNames.delete(name);
+    if (toolNames) {
+      this.#config.tools = this.#config.tools.filter((t) => !toolNames.has(t.name));
+    }
   }
 
   /** Enable a registered skill */
@@ -191,17 +203,25 @@ export class Agent {
     this.#skills.enable(name);
     const skill = this.#skills.get(name);
     if (skill) {
-      this.#config.tools.push(...skill.tools);
+      const existingNames = new Set(this.#config.tools.map((t) => t.name));
+      const newTools = skill.tools.filter((t) => !existingNames.has(t.name));
+      this.#config.tools.push(...newTools);
+      this.#skillToolNames.set(name, new Set(skill.tools.map((t) => t.name)));
     }
   }
 
-  /** Disable a skill at runtime */
+  /** Disable a skill and remove its tools */
   disableSkill(name: string): void {
     this.#skills.disable(name);
+    const toolNames = this.#skillToolNames.get(name);
+    if (toolNames) {
+      this.#config.tools = this.#config.tools.filter((t) => !toolNames.has(t.name));
+      this.#skillToolNames.delete(name);
+    }
   }
 
   /** List all registered skills */
-  getSkills() {
+  getSkills(): Skill[] {
     return this.#skills.list();
   }
 }

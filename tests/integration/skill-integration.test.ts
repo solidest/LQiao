@@ -139,4 +139,69 @@ describe('Skill Integration with Agent', () => {
 
     expect(prompt).toContain('You are an expert.');
   });
+
+  it('should not duplicate tools when re-enabling a skill', async () => {
+    const mockTool = {
+      name: 'unique-tool',
+      description: 'Unique tool',
+      execute: vi.fn().mockResolvedValue({ success: true, data: 'ok' }),
+    };
+
+    const agent = createAgentWithSkills([
+      { name: 'toggle', description: 'Toggle skill', prompt: 'Toggle prompt', tools: [mockTool] },
+    ]);
+
+    agent.disableSkill('toggle');
+    const toolsAfterDisable = (agent.config.tools ?? []).map((t: { name: string }) => t.name);
+    expect(toolsAfterDisable).not.toContain('unique-tool');
+
+    agent.enableSkill('toggle');
+    const toolsAfterEnable = (agent.config.tools ?? []).map((t: { name: string }) => t.name);
+    const count = toolsAfterEnable.filter((n) => n === 'unique-tool').length;
+    expect(count).toBe(1);
+  });
+
+  it('should remove all tools contributed by a skill', async () => {
+    const toolA = { name: 'tool-a', description: 'desc', execute: vi.fn().mockResolvedValue({ success: true }) };
+    const toolB = { name: 'tool-b', description: 'desc', execute: vi.fn().mockResolvedValue({ success: true }) };
+
+    const agent = createAgentWithSkills([]);
+
+    agent.addSkill({
+      name: 'multi-tool-skill',
+      description: 'Has multiple tools',
+      prompt: 'Use tools',
+      tools: [toolA, toolB],
+    });
+
+    const toolsBefore = (agent.config.tools ?? []).map((t: { name: string }) => t.name);
+    expect(toolsBefore).toContain('tool-a');
+    expect(toolsBefore).toContain('tool-b');
+
+    agent.removeSkill('multi-tool-skill');
+
+    const toolsAfter = (agent.config.tools ?? []).map((t: { name: string }) => t.name);
+    expect(toolsAfter).not.toContain('tool-a');
+    expect(toolsAfter).not.toContain('tool-b');
+  });
+
+  it('should remove tools when disabling a skill', async () => {
+    const mockTool = {
+      name: 'disable-tool',
+      description: 'Tool to be removed',
+      execute: vi.fn().mockResolvedValue({ success: true, data: 'ok' }),
+    };
+
+    const agent = createAgentWithSkills([
+      { name: 'enabled-skill', description: 'Enabled', prompt: 'prompt', tools: [mockTool] },
+    ]);
+
+    const toolsBefore = (agent.config.tools ?? []).map((t: { name: string }) => t.name);
+    expect(toolsBefore).toContain('disable-tool');
+
+    agent.disableSkill('enabled-skill');
+
+    const toolsAfter = (agent.config.tools ?? []).map((t: { name: string }) => t.name);
+    expect(toolsAfter).not.toContain('disable-tool');
+  });
 });

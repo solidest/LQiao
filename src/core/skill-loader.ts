@@ -10,7 +10,12 @@ function loadSkill(input: SkillConfig | string, baseDir?: string): Skill {
       throw new Error(`Skill file not found: ${path}`);
     }
     const raw = readFileSync(path, 'utf-8');
-    const config: SkillConfig = JSON.parse(raw);
+    let config: SkillConfig;
+    try {
+      config = JSON.parse(raw);
+    } catch (e) {
+      throw new Error(`Invalid JSON in skill file: ${path}`);
+    }
     return normalizeSkill(config);
   }
   return normalizeSkill(input);
