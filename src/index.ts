@@ -7,6 +7,7 @@ export type { ErrorType } from './types/error';
 export type { MCPServerConfig, MCPTool, MCPToolResult, MCPState, MCPEventData } from './types/mcp';
 export type { SSETransportConfig } from './mcp/transports/sse';
 export type { StdioTransportOptions } from './mcp/transports/stdio';
+export type { SkillConfig, Skill } from './types/skill';
 
 // Errors
 export { LQiaoError, ERROR_TYPES, createModelError, createToolError, createSandboxError, createNetworkError, createRateLimitError, createMaxRetriesError, NetworkError, RateLimitError, MaxRetriesError } from './errors/base';
@@ -16,6 +17,8 @@ export { Agent } from './core/agent';
 export { DefaultEventBus, AGENT_EVENTS } from './core/event-bus';
 export { ReactAgent } from './core/react-agent';
 export { CodeAgent } from './core/code-agent';
+export { SkillRegistry } from './core/skill-registry';
+export { loadSkills } from './core/skill-loader';
 
 // Model
 export { BaseModel } from './model/base';

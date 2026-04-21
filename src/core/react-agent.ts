@@ -46,6 +46,7 @@ export class ReactAgent {
   #maxSteps: number;
   #maxRetries: number;
   #sandbox?: Sandbox;
+  #systemPromptSuffix?: string;
 
   constructor(config: {
     tools: Tool[];
@@ -53,12 +54,14 @@ export class ReactAgent {
     maxSteps?: number;
     maxRetries?: number;
     sandbox?: Sandbox;
+    systemPromptSuffix?: string;
   }) {
     this.#tools = new Map(config.tools.map((t) => [t.name, t]));
     this.#eventBus = config.eventBus;
     this.#maxSteps = config.maxSteps ?? 50;
     this.#maxRetries = config.maxRetries ?? 3;
     this.#sandbox = config.sandbox;
+    this.#systemPromptSuffix = config.systemPromptSuffix;
   }
 
   /**
@@ -76,6 +79,9 @@ export class ReactAgent {
       .join('\n');
 
     let prompt = DEFAULT_REACT_PROMPT.replace('{{TOOLS}}', toolsDesc).replace('{{TASK}}', task);
+    if (this.#systemPromptSuffix) {
+      prompt += `\n\n${this.#systemPromptSuffix}`;
+    }
 
     for (let step = 0; step < this.#maxSteps; step++) {
       this.#eventBus?.emit('onStep', { step, prompt });

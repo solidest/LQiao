@@ -4,6 +4,7 @@ import type { GenerateOptions, ModelResponse, StreamChunk } from '../types/model
 import type { EventHandler } from '../types/event';
 import type { Sandbox } from '../security/sandbox';
 import type { MCPClient } from '../mcp/client';
+import type { SkillConfig } from '../types/skill';
 import { DefaultEventBus } from './event-bus';
 import { ReactAgent } from './react-agent';
 import { modelRegistry } from '../model/registry';
@@ -12,21 +13,24 @@ import { MCPClient as MCPClientImpl } from '../mcp/client';
 import { wrapMCPTools } from '../tools/mcp-tool';
 import { createModelError } from '../errors/base';
 import type { EventBus } from '../types/event';
+import { SkillRegistry } from './skill-registry';
 
 /**
  * Main Agent class — aggregates model, tools, security, and events.
  */
 export class Agent {
-  #config: Required<Omit<AgentConfig, 'apiKey' | 'sandbox' | 'mcpServers'>> & {
+  #config: Required<Omit<AgentConfig, 'apiKey' | 'sandbox' | 'mcpServers' | 'skills'>> & {
     apiKey: string;
     sandbox: boolean | NonNullable<AgentConfig['sandbox']>;
     mcpServers: AgentConfig['mcpServers'];
+    skills: AgentConfig['skills'];
   };
 
   #eventBus: EventBus;
   #sandbox?: Sandbox;
   #mcpClients: MCPClient[] = [];
   #mcpInitialized = false;
+  #skills: SkillRegistry;
 
   constructor(config: AgentConfig) {
     this.#config = {
@@ -34,6 +38,7 @@ export class Agent {
       apiKey: config.apiKey ?? '',
       tools: config.tools ?? [],
       mcpServers: config.mcpServers ?? [],
+      skills: config.skills ?? [],
       sandbox: config.sandbox ?? false,
       maxSteps: config.maxSteps ?? 50,
       maxRetries: config.maxRetries ?? 3,
@@ -41,6 +46,14 @@ export class Agent {
     };
 
     this.#eventBus = new DefaultEventBus();
+    this.#skills = new SkillRegistry(this.#eventBus);
+
+    for (const skill of this.#config.skills ?? []) {
+      this.#skills.register(skill);
+    }
+
+    const skillTools = this.#skills.getEnabledTools();
+    this.#config.tools.push(...skillTools);
 
     if (this.#config.sandbox) {
       const sandboxConfig = typeof this.#config.sandbox === 'object'
@@ -90,6 +103,7 @@ export class Agent {
       maxSteps: this.#config.maxSteps,
       maxRetries: this.#config.maxRetries,
       sandbox: this.#sandbox,
+      systemPromptSuffix: this.#skills.getEnabledPrompts(),
     });
 
     try {
@@ -158,5 +172,36 @@ export class Agent {
   async disconnectMCP(): Promise<void> {
     await Promise.all(this.#mcpClients.map((c) => c.disconnect()));
     this.#mcpClients = [];
+  }
+
+  /** Register a new skill at runtime */
+  addSkill(config: SkillConfig): void {
+    this.#skills.register(config);
+    this.#config.tools.push(...this.#skills.get(config.name)?.tools ?? []);
+  }
+
+  /** Remove a skill by name */
+  removeSkill(name: string): void {
+    this.#skills.remove(name);
+    this.#config.tools = this.#config.tools.filter((t) => t.name !== name);
+  }
+
+  /** Enable a registered skill */
+  enableSkill(name: string): void {
+    this.#skills.enable(name);
+    const skill = this.#skills.get(name);
+    if (skill) {
+      this.#config.tools.push(...skill.tools);
+    }
+  }
+
+  /** Disable a skill at runtime */
+  disableSkill(name: string): void {
+    this.#skills.disable(name);
+  }
+
+  /** List all registered skills */
+  getSkills() {
+    return this.#skills.list();
   }
 }
