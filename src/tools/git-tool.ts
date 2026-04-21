@@ -3,13 +3,32 @@ import { ToolBase } from './base';
 import type { ToolResult } from '../types/tool';
 import type { Sandbox } from '../security/sandbox';
 
+export interface GitLogEntry {
+  hash: string;
+  author: string;
+  date: string;
+  message: string;
+}
+
+export interface GitDiff {
+  file: string;
+  changes: string;
+  stats: { added: number; removed: number };
+}
+
+export interface GitStatus {
+  staged: string[];
+  modified: string[];
+  untracked: string[];
+}
+
 /**
- * Built-in Git tool: add, commit, push operations.
+ * Built-in Git tool: add, commit, push, log, diff, status operations.
  * Uses simple-git for cross-platform compatibility.
  */
 export class GitTool extends ToolBase {
   name = 'git';
-  description = 'Git operations: add, commit, push';
+  description = 'Git operations: add, commit, push, log, diff, status';
 
   #git: SimpleGit;
 
@@ -32,8 +51,17 @@ export class GitTool extends ToolBase {
       case 'push':
         return this.#doPush(rest.remote as string | undefined, rest.branch as string | undefined);
 
+      case 'log':
+        return this.#doLog(rest.count as number | undefined, rest.file as string | undefined);
+
+      case 'diff':
+        return this.#doDiff(rest.file as string | undefined, rest.revision as string | undefined);
+
+      case 'status':
+        return this.#doStatus();
+
       default:
-        return { success: false, error: `Unknown git action: ${action}. Use add/commit/push.` };
+        return { success: false, error: `Unknown git action: ${action}. Use add/commit/push/log/diff/status.` };
     }
   }
 
@@ -73,6 +101,77 @@ export class GitTool extends ToolBase {
       return { success: false, error: `Git push failed: ${e}` };
     }
   }
+
+  async #doLog(count = 10, file?: string): Promise<ToolResult> {
+    try {
+      const options: { n: number; file?: string } = { n: count };
+      if (file) options.file = file;
+      const log = await this.#git.log(options);
+      const entries: GitLogEntry[] = log.all.map((c) => ({
+        hash: c.hash,
+        author: `${c.author_name} <${c.author_email}>`,
+        date: c.date,
+        message: c.message,
+      }));
+      return { success: true, data: { entries, total: entries.length } };
+    } catch (e) {
+      return { success: false, error: `Git log failed: ${e}` };
+    }
+  }
+
+  async #doDiff(file?: string, revision?: string): Promise<ToolResult> {
+    try {
+      const args: string[] = [];
+      if (revision) args.push(revision);
+      if (file) args.push('--', file);
+
+      const diffText = await this.#git.diff(args);
+      const lines = diffText.split('\n');
+      const added = lines.filter((l) => l.startsWith('+') && !l.startsWith('+++')).length;
+      const removed = lines.filter((l) => l.startsWith('-') && !l.startsWith('---')).length;
+
+      const target = file ?? revision ?? 'working tree';
+      const result: GitDiff = { file: target, changes: diffText, stats: { added, removed } };
+      return { success: true, data: result };
+    } catch (e) {
+      return { success: false, error: `Git diff failed: ${e}` };
+    }
+  }
+
+  async #doStatus(): Promise<ToolResult> {
+    try {
+      const status = await this.#git.status();
+      const result: GitStatus = {
+        staged: [
+          ...status.created,
+          ...status.staged,
+          ...status.renamed.map((r) => (typeof r === 'string' ? r : r.to)),
+        ],
+        modified: [...status.modified, ...status.deleted],
+        untracked: [...status.not_added],
+      };
+      return { success: true, data: result };
+    } catch (e) {
+      return { success: false, error: `Git status failed: ${e}` };
+    }
+  }
+}
+
+/** Map numeric keys from LLM to named params for actions that need them */
+function mapNumericArgs(action: string, obj: Record<string, unknown>): Record<string, unknown> {
+  const rest = Object.fromEntries(Object.entries(obj).filter(([k]) => k !== '0'));
+  switch (action.toLowerCase()) {
+    case 'log':
+      return { count: '1' in rest ? rest['1'] : undefined, file: '2' in rest ? rest['2'] : undefined };
+    case 'diff':
+      return { file: '1' in rest ? rest['1'] : undefined, revision: '2' in rest ? rest['2'] : undefined };
+    case 'commit':
+      return { message: '1' in rest ? rest['1'] : undefined, author: '2' in rest ? rest['2'] : undefined };
+    case 'push':
+      return { remote: '1' in rest ? rest['1'] : undefined, branch: '2' in rest ? rest['2'] : undefined };
+    default:
+      return rest;
+  }
 }
 
 /** Extract action and parameters from args (supports object or positional args) */
@@ -88,11 +187,10 @@ function extractArgs(args: unknown[]): { action: string } & Record<string, unkno
       const { action, ...rest } = obj;
       return { action, ...rest };
     }
-    // Numeric-key format from LLM
-    return {
-      action: (obj['0'] as string) ?? '',
-      ...Object.fromEntries(Object.entries(obj).filter(([k]) => k !== '0')),
-    };
+    // Numeric-key format from LLM: {0: 'action', 1: 'arg', 2: 'arg2'}
+    const act = (obj['0'] as string) ?? '';
+    const mapped = mapNumericArgs(act, obj);
+    return { action: act, ...mapped };
   }
 
   // Positional: action, arg2, arg3...
@@ -104,6 +202,12 @@ function extractArgs(args: unknown[]): { action: string } & Record<string, unkno
       return { action, message: args[1], author: args[2] };
     case 'push':
       return { action, remote: args[1], branch: args[2] };
+    case 'log':
+      return { action, count: args[1] ?? 10, file: args[2] };
+    case 'diff':
+      return { action, file: args[1], revision: args[2] };
+    case 'status':
+      return { action };
     default:
       return { action, extra: args.slice(1) };
   }
