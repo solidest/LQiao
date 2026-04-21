@@ -1,0 +1,56 @@
+{
+  "name": "lqiao",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LQiao / 灵桥 — 轻量可嵌入的 TypeScript AI 智能体框架",
+  "type": "module",
+  "main": "./dist/cjs/index.cjs",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/esm/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/esm/index.js"
+      },
+      "require": {
+        "types": "./dist/esm/index.d.ts",
+        "default": "./dist/cjs/index.cjs"
+      }
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "check": "bun run typecheck && bun run test"
+  },
+  "keywords": [
+    "ai",
+    "agent",
+    "typescript",
+    "react",
+    "codeagent",
+    "llm",
+    "mcp"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "simple-git": "^3.27.0",
+    "@anthropic-ai/sdk": "^0.39.0",
+    "openai": "^4.85.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.0",
+    "tsup": "^8.3.0",
+    "vitest": "^3.0.0",
+    "@vitest/coverage-v8": "^3.0.0"
+  }
+}

@@ -1,8 +1,9 @@
-# Nestjs specific
+# Build output
 /dist
 /node_modules
 /build
 /tmp
+.tsup-node_modules
 
 # Logs
 logs
