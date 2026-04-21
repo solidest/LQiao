@@ -1,13 +1,19 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { AuditLog } from '../../../src/security/audit';
-import { writeFileSync, readFileSync, unlinkSync } from 'node:fs';
+import { unlinkSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
+
+const TEST_FILE = join(process.cwd(), '.test-audit.json');
 
 describe('AuditLog', () => {
   let log: AuditLog;
 
   beforeEach(() => {
     log = new AuditLog();
+  });
+
+  afterEach(() => {
+    if (existsSync(TEST_FILE)) unlinkSync(TEST_FILE);
   });
 
   it('should record entries', () => {
@@ -108,16 +114,13 @@ describe('AuditLog', () => {
     it('should save and load entries', async () => {
       log.record({ tool: 'file', action: 'read', args: { path: '/tmp/x' }, success: true, duration: 5 });
 
-      const path = join(process.cwd(), '.test-audit.json');
-      await log.saveToFile(path);
+      await log.saveToFile(TEST_FILE);
 
       const log2 = new AuditLog();
-      await log2.loadFromFile(path);
+      await log2.loadFromFile(TEST_FILE);
 
       expect(log2.size).toBe(1);
       expect(log2.getEntries()[0].tool).toBe('file');
-
-      unlinkSync(path);
     });
   });
 });

@@ -88,14 +88,14 @@ export class AuditLog {
 
   /** Persist log to a JSON file */
   async saveToFile(path: string): Promise<void> {
-    const { writeFileSync } = await import('node:fs');
-    writeFileSync(path, this.toJSON(), 'utf-8');
+    const { writeFile } = await import('node:fs/promises');
+    await writeFile(path, this.toJSON(), 'utf-8');
   }
 
   /** Load log from a JSON file, replacing current entries */
   async loadFromFile(path: string): Promise<void> {
-    const { readFileSync } = await import('node:fs');
-    const raw = readFileSync(path, 'utf-8');
+    const { readFile } = await import('node:fs/promises');
+    const raw = await readFile(path, 'utf-8');
     const entries = JSON.parse(raw) as AuditEntry[];
     this.#entries = entries;
   }

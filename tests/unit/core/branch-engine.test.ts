@@ -33,7 +33,7 @@ describe('BranchEngine', () => {
       const decision = evaluateBranch(rules, result);
 
       expect(decision.matched).toBe(false);
-      expect(decision.steps).toEqual([]);
+      expect(decision.steps).toEqual(['continue']);
     });
 
     it('should match contains condition', () => {
@@ -132,14 +132,24 @@ describe('BranchEngine', () => {
       expect(decision.steps).toEqual(['create resource']);
     });
 
-    it('should return empty steps when no rules match', () => {
+    it('should return elseSteps when no rules match', () => {
       const rules: BranchRule[] = [
         {
           condition: { type: 'equals', field: 'error', value: 'specific' },
           thenSteps: ['handle specific'],
-          elseSteps: [],
+          elseSteps: ['default fallback'],
         },
       ];
+
+      const result: ToolResult = { success: false, error: 'generic' };
+      const decision = evaluateBranch(rules, result);
+
+      expect(decision.matched).toBe(false);
+      expect(decision.steps).toEqual(['default fallback']);
+    });
+
+    it('should return empty steps when no rules and no elseSteps', () => {
+      const rules: BranchRule[] = [];
 
       const result: ToolResult = { success: false, error: 'generic' };
       const decision = evaluateBranch(rules, result);

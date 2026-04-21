@@ -72,62 +72,7 @@ export class ReactAgent {
     generate: (prompt: string, options?: GenerateOptions) => Promise<ModelResponse>,
     task: string,
   ): Promise<string> {
-    const history: string[] = [];
-    const toolsDesc = Array.from(this.#tools.values())
-      .map((t) => `- ${t.name}: ${t.description}`)
-      .join('\n');
-
-    let prompt = DEFAULT_REACT_PROMPT.replace('{{TOOLS}}', toolsDesc).replace('{{TASK}}', task);
-
-    for (let step = 0; step < this.#maxSteps; step++) {
-      this.#eventBus?.emit('onStep', { step, prompt });
-
-      const response = await withRetry(
-        () => generate(this.#truncate(prompt)),
-        { maxRetries: this.#maxRetries },
-      );
-
-      const parsed = this.#parseResponse(response.text);
-      history.push(response.text);
-
-      if (parsed.finalAnswer) {
-        this.#eventBus?.emit('afterRun', { answer: parsed.finalAnswer, steps: step + 1 });
-        return parsed.finalAnswer;
-      }
-
-      if (parsed.action) {
-        const tool = this.#tools.get(parsed.action);
-        if (!tool) {
-          history.push(`Observation: Tool "${parsed.action}" not found`);
-          prompt += `\n\n${response.text}\nObservation: Tool "${parsed.action}" not found`;
-          continue;
-        }
-
-        this.#eventBus?.emit('onToolCall', { tool: parsed.action, args: parsed.args });
-
-        try {
-          const result = await tool.execute(
-            ...(parsed.args ? [parsed.args] : []),
-          );
-          const observation = result.success
-            ? JSON.stringify(result.data)
-            : result.error ?? 'Unknown error';
-          history.push(`Observation: ${observation}`);
-          prompt += `\n\n${response.text}\nObservation: ${observation}`;
-          this.#eventBus?.emit('onToolResult', { tool: parsed.action, result });
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          history.push(`Observation: Error — ${msg}`);
-          prompt += `\n\n${response.text}\nObservation: Error — ${msg}`;
-          this.#eventBus?.emit('onError', { tool: parsed.action, error: msg });
-        }
-      }
-    }
-
-    throw new LQiaoError(
-      ERROR_TYPES.MAX_STEPS,
-      `Exceeded maximum steps (${this.#maxSteps})`,
-    );
+    return this.#runLoop(generate, task, () => '');
   }
 
   /**
@@ -140,6 +85,23 @@ export class ReactAgent {
     generate: (prompt: string, options?: GenerateOptions) => Promise<ModelResponse>,
     task: string,
     branches: BranchRule[],
+  ): Promise<string> {
+    return this.#runLoop(generate, task, (result) => {
+      if (branches.length === 0) return '';
+      const decision = evaluateBranch(branches, result);
+      if (decision.steps.length > 0) {
+        return `Branch condition ${decision.matched ? 'matched' : 'not met'}. ` +
+          `Suggested steps: ${decision.steps.join(', ')}`;
+      }
+      return '';
+    });
+  }
+
+  /** Shared ReAct loop — used by both run() and runWithBranches() */
+  async #runLoop(
+    generate: (prompt: string, options?: GenerateOptions) => Promise<ModelResponse>,
+    task: string,
+    onToolResult: (result: import('../types/tool').ToolResult) => string,
   ): Promise<string> {
     const history: string[] = [];
     const toolsDesc = Array.from(this.#tools.values())
@@ -183,16 +145,10 @@ export class ReactAgent {
             : result.error ?? 'Unknown error';
           history.push(`Observation: ${observation}`);
 
-          // Evaluate branch rules and inject conditional steps
-          if (branches.length > 0) {
-            const decision = evaluateBranch(branches, result);
-            if (decision.steps.length > 0) {
-              prompt += `\n\nBranch condition ${decision.matched ? 'matched' : 'not met'}. ` +
-                `Suggested steps: ${decision.steps.join(', ')}`;
-            }
-          }
+          const branchHint = onToolResult(result);
+          const hintPrefix = branchHint ? `\n\n${branchHint}` : '';
 
-          prompt += `\n\n${response.text}\nObservation: ${observation}`;
+          prompt += `\n\n${response.text}\nObservation: ${observation}${hintPrefix}`;
           this.#eventBus?.emit('onToolResult', { tool: parsed.action, result });
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);

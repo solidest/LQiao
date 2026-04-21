@@ -65,5 +65,5 @@ export function evaluateBranch(
       return { matched: true, steps: rule.thenSteps };
     }
   }
-  return { matched: false, steps: [] };
+  return { matched: false, steps: rules[0]?.elseSteps ?? [] };
 }
