@@ -28,10 +28,12 @@ export class Agent {
 
   #eventBus: EventBus;
   #sandbox?: Sandbox;
+  #originalSandboxConfig?: NonNullable<AgentConfig['sandbox']> & object;
   #mcpClients: MCPClient[] = [];
   #mcpInitialized = false;
   #skills: SkillRegistry;
   #skillToolNames: Map<string, Set<string>> = new Map();
+  #removedToolNames: Set<string> = new Set();
 
   constructor(config: AgentConfig) {
     this.#config = {
@@ -64,6 +66,9 @@ export class Agent {
         ? this.#config.sandbox
         : {};
       this.#sandbox = new SandboxImpl(sandboxConfig);
+      if (typeof this.#config.sandbox === 'object') {
+        this.#originalSandboxConfig = this.#config.sandbox;
+      }
     }
   }
 
@@ -204,7 +209,7 @@ export class Agent {
     const skill = this.#skills.get(name);
     if (skill) {
       const existingNames = new Set(this.#config.tools.map((t) => t.name));
-      const newTools = skill.tools.filter((t) => !existingNames.has(t.name));
+      const newTools = skill.tools.filter((t) => !existingNames.has(t.name) && !this.#removedToolNames.has(t.name));
       this.#config.tools.push(...newTools);
       this.#skillToolNames.set(name, new Set(skill.tools.map((t) => t.name)));
     }
@@ -223,5 +228,67 @@ export class Agent {
   /** List all registered skills */
   getSkills(): Skill[] {
     return this.#skills.list();
+  }
+
+  /** Add or replace a tool at runtime */
+  addTool(tool: Tool): void {
+    const idx = this.#config.tools.findIndex((t) => t.name === tool.name);
+    if (idx >= 0) {
+      this.#config.tools[idx] = tool;
+      this.#eventBus.emit('onToolUpdated', { name: tool.name });
+    } else {
+      this.#config.tools.push(tool);
+      this.#eventBus.emit('onToolRegistered', { name: tool.name });
+    }
+  }
+
+  /** Remove a tool by name */
+  removeTool(name: string): void {
+    const initialLen = this.#config.tools.length;
+    this.#config.tools = this.#config.tools.filter((t) => t.name !== name);
+    for (const toolNames of this.#skillToolNames.values()) {
+      toolNames.delete(name);
+    }
+    this.#removedToolNames.add(name);
+    if (this.#config.tools.length < initialLen) {
+      this.#eventBus.emit('onToolRemoved', { name });
+    }
+  }
+
+  /** Update sandbox configuration at runtime */
+  updateSandbox(sandbox: Sandbox | boolean): void {
+    if (sandbox === false) {
+      this.#sandbox = undefined;
+      this.#config.sandbox = false;
+    } else if (sandbox === true) {
+      if (this.#originalSandboxConfig) {
+        this.#sandbox = new SandboxImpl(this.#originalSandboxConfig);
+      } else {
+        this.#sandbox = new SandboxImpl({});
+      }
+      this.#config.sandbox = true;
+    } else {
+      this.#sandbox = sandbox;
+      this.#config.sandbox = true;
+    }
+  }
+
+  /** Update partial agent config at runtime */
+  updateConfig(partial: Pick<AgentConfig, 'maxSteps' | 'maxRetries' | 'verbose'>): void {
+    if (partial.maxSteps != null) this.#config.maxSteps = partial.maxSteps;
+    if (partial.maxRetries != null) this.#config.maxRetries = partial.maxRetries;
+    if (partial.verbose != null) this.#config.verbose = partial.verbose;
+  }
+
+  /** Clear all tools and disable all skills */
+  clearTools(): void {
+    this.#config.tools = [];
+    for (const skill of this.#skills.list()) {
+      if (skill.enabled) {
+        this.#skills.disable(skill.name);
+      }
+    }
+    this.#skillToolNames.clear();
+    this.#removedToolNames.clear();
   }
 }

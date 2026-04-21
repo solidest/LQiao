@@ -15,6 +15,10 @@ export interface Tool {
   name: string;
   /** Human-readable description */
   description: string;
+  /** Tool version for hot-swap tracking */
+  version?: string;
+  /** Arbitrary metadata (category, author, etc.) */
+  metadata?: Record<string, unknown>;
   /** JSON Schema for tool parameters */
   parameters?: ToolParameters;
   /** Execute the tool with given arguments */

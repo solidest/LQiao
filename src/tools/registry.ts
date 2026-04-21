@@ -3,10 +3,18 @@ import type { Tool } from '../types/tool';
 /** Tool registry — manages available tools for agents */
 export class ToolRegistry {
   #tools = new Map<string, Tool>();
+  #onRegistered?: (tool: Tool) => void;
+  #onRemoved?: (name: string) => void;
+
+  constructor(options?: { onRegistered?: (tool: Tool) => void; onRemoved?: (name: string) => void }) {
+    this.#onRegistered = options?.onRegistered;
+    this.#onRemoved = options?.onRemoved;
+  }
 
   /** Register a tool by its name */
   register(tool: Tool): void {
     this.#tools.set(tool.name, tool);
+    this.#onRegistered?.(tool);
   }
 
   /** Register multiple tools at once */
@@ -14,6 +22,14 @@ export class ToolRegistry {
     for (const tool of tools) {
       this.register(tool);
     }
+  }
+
+  /** Replace an existing tool; returns the old tool if it existed */
+  replace(name: string, tool: Tool): Tool | undefined {
+    const old = this.#tools.get(name);
+    this.#tools.set(name, tool);
+    this.#onRegistered?.(tool);
+    return old;
   }
 
   /** Get a tool by name */
@@ -29,6 +45,7 @@ export class ToolRegistry {
   /** Remove a tool by name */
   remove(name: string): void {
     this.#tools.delete(name);
+    this.#onRemoved?.(name);
   }
 
   /** Get the number of registered tools */
