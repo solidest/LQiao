@@ -41,3 +41,4 @@ export type { TimingRecord } from './logger/profiler';
 
 // Utilities
 export { withRetry } from './utils/retry';
+export { matchesPattern } from './utils/glob';

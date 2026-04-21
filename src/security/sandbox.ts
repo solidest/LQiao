@@ -105,5 +105,5 @@ const DEFAULT_BLOCKED_COMMANDS = [
 /** Check if `child` is under `parent` in the file system */
 function isPathUnder(child: string, parent: string): boolean {
   const rel = relative(parent, child);
-  return !rel.startsWith('..') && !isAbsolute(rel) && rel !== '';
+  return !rel.startsWith('..') && !isAbsolute(rel);
 }

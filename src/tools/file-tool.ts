@@ -3,6 +3,13 @@ import { ToolBase } from './base';
 import type { ToolResult } from '../types/tool';
 import type { Sandbox } from '../security/sandbox';
 
+/** Normalized args from various call conventions */
+interface FileArgs {
+  action: string;
+  path: string;
+  content?: string;
+}
+
 /**
  * Built-in file tool: read, write, delete files within sandbox boundaries.
  */
@@ -14,7 +21,8 @@ export class FileTool extends ToolBase {
     super(sandbox);
   }
 
-  protected async doExecute(action: string, path: string, content?: string): Promise<ToolResult> {
+  protected async doExecute(...args: unknown[]): Promise<ToolResult> {
+    const { action, path, content } = extractArgs(args);
     const safePath = this.sandbox ? this.sandbox.validatePath(path) : path;
 
     switch (action.toLowerCase()) {
@@ -49,4 +57,36 @@ export class FileTool extends ToolBase {
         return { success: false, error: `Unknown file action: ${action}. Use read/write/delete.` };
     }
   }
+}
+
+/** Extract action/path/content from args (supports object or positional args) */
+function extractArgs(args: unknown[]): FileArgs {
+  if (args.length === 0) {
+    return { action: '', path: '' };
+  }
+
+  const first = args[0];
+  if (typeof first === 'object' && first !== null) {
+    const obj = first as Record<string, unknown>;
+    if ('action' in obj && typeof obj.action === 'string') {
+      return {
+        action: obj.action,
+        path: (obj.path as string) ?? '',
+        content: obj.content as string | undefined,
+      };
+    }
+    // Numeric-key format from LLM: { "0": "read", "1": "/path" }
+    return {
+      action: (obj['0'] as string) ?? '',
+      path: (obj['1'] as string) ?? '',
+      content: obj['2'] as string | undefined,
+    };
+  }
+
+  // Positional: doExecute('read', '/path', content)
+  return {
+    action: args[0] as string,
+    path: (args[1] as string) ?? '',
+    content: args[2] as string | undefined,
+  };
 }

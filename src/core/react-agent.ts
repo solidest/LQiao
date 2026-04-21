@@ -34,6 +34,9 @@ Task: {{TASK}}
 Begin.
 `;
 
+/** Max prompt length before truncation kicks in (chars, ~4x token count) */
+const MAX_PROMPT_LENGTH = 100_000;
+
 /**
  * ReAct Agent — implements the Thought → Action → Observation loop.
  */
@@ -78,7 +81,7 @@ export class ReactAgent {
       this.#eventBus?.emit('onStep', { step, prompt });
 
       const response = await withRetry(
-        () => generate(prompt),
+        () => generate(this.#truncate(prompt)),
         { maxRetries: this.#maxRetries },
       );
 
@@ -123,6 +126,18 @@ export class ReactAgent {
       ERROR_TYPES.MAX_STEPS,
       `Exceeded maximum steps (${this.#maxSteps})`,
     );
+  }
+
+  /** Truncate older steps if prompt exceeds length limit, keeping the system header intact */
+  #truncate(prompt: string): string {
+    if (prompt.length <= MAX_PROMPT_LENGTH) return prompt;
+    const firstNewline = prompt.indexOf('\n\nBegin.');
+    if (firstNewline === -1) return prompt.slice(-MAX_PROMPT_LENGTH);
+    const header = prompt.slice(0, firstNewline + '\n\nBegin.\n'.length);
+    const tail = prompt.slice(firstNewline + '\n\nBegin.\n'.length);
+    const overflow = header.length + tail.length - MAX_PROMPT_LENGTH;
+    if (overflow <= 0) return prompt;
+    return header + '[...truncated...]' + tail.slice(overflow);
   }
 
   /** Parse model response into thought/action/answer */

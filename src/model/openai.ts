@@ -20,7 +20,7 @@ export class OpenAIModel extends BaseModel {
     const response = await this.#client.chat.completions.create({
       model: this.model,
       messages: [{ role: 'user', content: prompt }],
-      max_tokens: options?.maxTokens,
+      ...(options?.maxTokens != null ? { max_tokens: options.maxTokens } : {}),
       temperature: options?.temperature,
       stop: options?.stop,
       stream: false,

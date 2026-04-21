@@ -1,4 +1,5 @@
 import { AGENT_EVENTS, type EventBus, type EventHandler } from '../types/event';
+import { matchesPattern } from '../utils/glob';
 
 // Re-export for consumers who don't want to import from types/
 export { AGENT_EVENTS };
@@ -38,19 +39,4 @@ export class DefaultEventBus implements EventBus {
     };
     this.on(event, wrapper);
   }
-}
-
-/** Simple glob matcher supporting `*` and `**` */
-function matchesPattern(value: string, pattern: string): boolean {
-  if (pattern === value) return true;
-  if (pattern === '**') return true;
-
-  const regex = pattern
-    .replaceAll('\\', '\\\\')
-    .replaceAll('.', '\\.')
-    .replaceAll('**', '\x00')
-    .replaceAll('*', '[^:]*')
-    .replaceAll('\x00', '.*');
-
-  return new RegExp(`^${regex}$`).test(value);
 }

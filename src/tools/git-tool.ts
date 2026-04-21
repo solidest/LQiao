@@ -53,11 +53,11 @@ export class GitTool extends ToolBase {
       return { success: false, error: 'Git commit requires a message' };
     }
     try {
-      const opts: Record<string, string> = { '-m': message };
       if (author) {
-        opts['--author'] = author;
+        await this.#git.commit(['-m', message], { '--author': author });
+      } else {
+        await this.#git.commit(message);
       }
-      await this.#git.commit(message);
       return { success: true, data: { message } };
     } catch (e) {
       return { success: false, error: `Git commit failed: ${e}` };

@@ -73,7 +73,11 @@ export class Agent {
     }
   }
 
-  /** Stream the reasoning process */
+  /**
+   * Stream raw model output for a task.
+   * Note: this bypasses the ReAct loop, tools, and sandbox.
+   * Use for streaming-only model interactions, not agent-driven tasks.
+   */
   async *stream(task: string): AsyncIterable<StreamChunk> {
     this.#eventBus.emit('beforeRun', { task, streaming: true });
 
