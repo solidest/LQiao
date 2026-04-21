@@ -1,7 +1,19 @@
-import type { MCPServerConfig, MCPTool, MCPToolResult, MCPState } from '../types/mcp';
+import type { MCPServerConfig, MCPTool, MCPToolResult, MCPState, MCPEventData } from '../types/mcp';
 import { StdioTransport } from './transports/stdio';
 import { SSETransport } from './transports/sse';
 import { EventEmitter } from 'node:events';
+
+/** MCP protocol version used for initialization */
+const MCP_PROTOCOL_VERSION = '2024-11-05';
+
+/** LQiao client info sent during initialization */
+const CLIENT_INFO = { name: 'lqiao', version: '0.1.0' };
+
+/** MCPClient event names — use these for typed event handling */
+export const MCP_EVENTS = {
+  STATE_CHANGE: 'stateChange',
+  TOOLS_DISCOVERED: 'toolsDiscovered',
+} as const;
 
 /**
  * MCP client: manages connection lifecycle, tool discovery, and tool calls.
@@ -35,7 +47,7 @@ export class MCPClient extends EventEmitter {
           env: this.#config.env,
         });
       } else {
-        this.#sse = new SSETransport(timeoutMs);
+        this.#sse = new SSETransport({ connectTimeout: timeoutMs });
         const sseUrl = this.#config.sseUrl;
         if (!sseUrl) {
           throw new Error('SSE transport requires sseUrl');
@@ -45,10 +57,10 @@ export class MCPClient extends EventEmitter {
 
       // Initialize the MCP session
       await this.#request('initialize', {
-        protocolVersion: '2024-11-05',
+        protocolVersion: MCP_PROTOCOL_VERSION,
         capabilities: {},
-        clientInfo: { name: 'lqiao', version: '0.1.0' },
-      }, undefined, timeoutMs);
+        clientInfo: CLIENT_INFO,
+      }, timeoutMs);
 
       await this.#discoverTools(timeoutMs);
       this.#setState('connected');
@@ -75,7 +87,7 @@ export class MCPClient extends EventEmitter {
 
   /** Call an MCP tool by name */
   async callTool(name: string, args: Record<string, unknown>): Promise<MCPToolResult> {
-    const result = await this.#request('tools/call', { name, arguments: args }, undefined, this.#config.timeout);
+    const result = await this.#request('tools/call', { name, arguments: args }, this.#config.timeout);
     return result as MCPToolResult;
   }
 
@@ -95,17 +107,20 @@ export class MCPClient extends EventEmitter {
 
   #setState(state: MCPState): void {
     this.#state = state;
-    this.emit('stateChange', { state, serverName: this.#config.command, toolsFound: this.#tools.length });
+    const serverName = this.#config.transport === 'sse'
+      ? this.#config.sseUrl
+      : this.#config.command;
+    this.emit(MCP_EVENTS.STATE_CHANGE, { state, serverName, toolsFound: this.#tools.length } as MCPEventData);
   }
 
   async #discoverTools(timeoutMs: number): Promise<void> {
-    const result = await this.#request('tools/list', undefined, undefined, timeoutMs);
+    const result = await this.#request('tools/list', undefined, timeoutMs);
     const tools = (result as { tools: MCPTool[] })?.tools ?? [];
     this.#tools = tools;
-    this.emit('toolsDiscovered', { tools: this.#tools.length });
+    this.emit(MCP_EVENTS.TOOLS_DISCOVERED, { tools: this.#tools.length });
   }
 
-  async #request(method: string, params?: Record<string, unknown>, _signal?: AbortSignal, timeoutMs = 30000): Promise<unknown> {
+  async #request(method: string, params?: Record<string, unknown>, timeoutMs = 30000): Promise<unknown> {
     const transport = this.#stdio ?? this.#sse;
     if (!transport) {
       throw new Error('No transport available');

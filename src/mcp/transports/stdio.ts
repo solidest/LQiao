@@ -4,7 +4,10 @@ import { EventEmitter } from 'node:events';
 export interface StdioTransportOptions {
   command: string;
   args: string[];
+  /** Environment variables to pass to the child process. Defaults to empty (no inheritance). */
   env?: Record<string, string>;
+  /** Set to true to inherit the current process.env (may expose sensitive variables) */
+  inheritEnv?: boolean;
 }
 
 /**
@@ -16,9 +19,13 @@ export class StdioTransport extends EventEmitter {
   #buffer = '';
   #pending = new Map<number | string, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
   #id = 0;
+  #connected = false;
 
   async connect(options: StdioTransportOptions): Promise<void> {
-    const env = { ...process.env, ...options.env };
+    const env = options.inheritEnv
+      ? { ...process.env, ...options.env }
+      : (options.env ?? {});
+
     this.#process = spawn(options.command, options.args, {
       stdio: ['pipe', 'pipe', 'inherit'],
       env,
@@ -30,6 +37,7 @@ export class StdioTransport extends EventEmitter {
     });
 
     this.#process.on('exit', (code) => {
+      this.#connected = false;
       const error = new Error(`MCP server exited with code ${code ?? 'unknown'}`);
       for (const { reject } of this.#pending.values()) {
         reject(error);
@@ -39,16 +47,20 @@ export class StdioTransport extends EventEmitter {
     });
 
     this.#process.on('error', (err) => {
+      this.#connected = false;
       for (const { reject } of this.#pending.values()) {
         reject(err);
       }
       this.#pending.clear();
       this.emit('error', err);
     });
+
+    this.#connected = true;
   }
 
   async request(method: string, params?: Record<string, unknown>, timeoutMs = 30000): Promise<unknown> {
-    if (!this.#process?.stdin) {
+    const stdin = this.#process?.stdin;
+    if (!stdin) {
       throw new Error('Transport not connected');
     }
 
@@ -72,11 +84,12 @@ export class StdioTransport extends EventEmitter {
         },
       });
 
-      this.#process!.stdin!.write(JSON.stringify(message) + '\n');
+      stdin.write(JSON.stringify(message) + '\n');
     });
   }
 
   async disconnect(): Promise<void> {
+    this.#connected = false;
     if (this.#process) {
       this.#process.stdin?.end();
       this.#process.kill();
@@ -89,7 +102,7 @@ export class StdioTransport extends EventEmitter {
   }
 
   get isConnected(): boolean {
-    return this.#process !== undefined && !this.#process.killed;
+    return this.#connected;
   }
 
   #processBuffer(): void {

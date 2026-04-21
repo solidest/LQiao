@@ -20,7 +20,7 @@ export class MCPToolAdapter extends ToolBase {
     this.#mcpTool = mcpTool;
     this.name = mcpTool.name;
     this.description = mcpTool.description;
-    this.parameters = mcpTool.inputSchema as Record<string, unknown> | undefined;
+    this.parameters = validateInputSchema(mcpTool.inputSchema);
   }
 
   protected async doExecute(...args: unknown[]): Promise<ToolResult> {
@@ -62,4 +62,16 @@ function extractTextContent(result: { content?: Array<{ type: string; text?: str
   if (!result.content) return undefined;
   const texts = result.content.filter((c) => c.type === 'text' && c.text).map((c) => c.text!);
   return texts.join('\n');
+}
+
+/** Validate that inputSchema is a well-formed object, return {} if malformed */
+function validateInputSchema(schema: unknown): Record<string, unknown> {
+  if (typeof schema !== 'object' || schema === null || Array.isArray(schema)) {
+    return {};
+  }
+  const obj = schema as Record<string, unknown>;
+  if (typeof obj.type === 'string' || typeof obj.properties === 'object' && obj.properties !== null) {
+    return obj;
+  }
+  return {};
 }

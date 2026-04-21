@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { MCPClient } from '../../../src/mcp/client';
+import { MCPClient, MCP_EVENTS } from '../../../src/mcp/client';
 
 // Mock StdioTransport
 const mockStdioRequest = vi.fn();
@@ -201,5 +201,46 @@ describe('MCPClient', () => {
     });
 
     await expect(sseClient.connect()).rejects.toThrow('requires sseUrl');
+  });
+
+  it('should use sseUrl as serverName in stateChange event for SSE transport', async () => {
+    mockSSERequest.mockImplementation((method: string) => {
+      if (method === 'tools/list') return Promise.resolve({ tools: [] });
+      return Promise.resolve({});
+    });
+
+    const sseClient = new MCPClient({
+      command: 'unused',
+      args: [],
+      transport: 'sse',
+      sseUrl: 'http://localhost:4000/events',
+    });
+
+    let serverName = '';
+    sseClient.on(MCP_EVENTS.STATE_CHANGE, (data: { serverName: string }) => { serverName = data.serverName; });
+
+    await sseClient.connect();
+    expect(serverName).toBe('http://localhost:4000/events');
+
+    await sseClient.disconnect();
+  });
+
+  it('should use command as serverName for stdio transport', async () => {
+    mockStdioRequest.mockResolvedValue({ tools: [] });
+
+    const client = new MCPClient({ command: 'my-mcp-server', args: [] });
+
+    let serverName = '';
+    client.on(MCP_EVENTS.STATE_CHANGE, (data: { serverName: string }) => { serverName = data.serverName; });
+
+    await client.connect();
+    expect(serverName).toBe('my-mcp-server');
+
+    await client.disconnect();
+  });
+
+  it('should expose MCP_EVENTS constants', () => {
+    expect(MCP_EVENTS.STATE_CHANGE).toBe('stateChange');
+    expect(MCP_EVENTS.TOOLS_DISCOVERED).toBe('toolsDiscovered');
   });
 });

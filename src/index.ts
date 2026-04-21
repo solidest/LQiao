@@ -5,6 +5,8 @@ export type { GenerateOptions, ModelResponse, StreamChunk, ModelProviderConfig }
 export type { AgentEvent, EventHandler, EventBus } from './types/event';
 export type { ErrorType } from './types/error';
 export type { MCPServerConfig, MCPTool, MCPToolResult, MCPState, MCPEventData } from './types/mcp';
+export type { SSETransportConfig } from './mcp/transports/sse';
+export type { StdioTransportOptions } from './mcp/transports/stdio';
 
 // Errors
 export { LQiaoError, ERROR_TYPES, createModelError, createToolError, createSandboxError, createNetworkError, createRateLimitError, createMaxRetriesError, NetworkError, RateLimitError, MaxRetriesError } from './errors/base';
@@ -36,7 +38,7 @@ export { AuditLog } from './security/audit';
 export type { AuditEntry } from './security/audit';
 
 // MCP
-export { MCPClient } from './mcp/client';
+export { MCPClient, MCP_EVENTS } from './mcp/client';
 export { StdioTransport } from './mcp/transports/stdio';
 export { SSETransport } from './mcp/transports/sse';
 

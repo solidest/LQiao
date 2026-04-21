@@ -171,4 +171,23 @@ describe('StdioTransport', () => {
     await expect(requestPromise).rejects.toThrow('Transport disconnected');
     expect(mockProcess.kill).toHaveBeenCalled();
   });
+
+  it('should not inherit process.env by default', async () => {
+    const { spawn } = await import('node:child_process');
+
+    await transport.connect({ command: 'node', args: [] });
+
+    const envArg = (spawn as ReturnType<typeof vi.fn>).mock.calls[0][2].env;
+    expect(envArg).toEqual({});
+  });
+
+  it('should inherit process.env when inheritEnv is true', async () => {
+    const { spawn } = await import('node:child_process');
+
+    await transport.connect({ command: 'node', args: [], inheritEnv: true, env: { MY_VAR: 'test' } });
+
+    const envArg = (spawn as ReturnType<typeof vi.fn>).mock.calls[0][2].env;
+    expect(envArg.MY_VAR).toBe('test');
+    expect(envArg.PATH).toBeDefined();
+  });
 });

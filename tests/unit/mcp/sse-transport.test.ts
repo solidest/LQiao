@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mockHttpGet = vi.fn();
+const mockHttpsGet = vi.fn();
 const mockHttpRequest = vi.fn();
 
 vi.mock('node:http', () => ({
@@ -12,7 +13,7 @@ vi.mock('node:http', () => ({
 
 vi.mock('node:https', () => ({
   default: {
-    get: (...args: unknown[]) => mockHttpGet(...args),
+    get: (...args: unknown[]) => mockHttpsGet(...args),
     request: (...args: unknown[]) => mockHttpRequest(...args),
   },
 }));
@@ -49,11 +50,12 @@ function makeMockRes(overrides: Partial<{ statusCode: number; onData: (handler: 
 describe('SSETransport', () => {
   let transport: SSETransport;
 
-  beforeEach(() => {
+    beforeEach(() => {
     vi.clearAllMocks();
     mockHttpGet.mockReset();
     mockHttpRequest.mockReset();
-    transport = new SSETransport(5000);
+    mockHttpsGet.mockReset();
+    transport = new SSETransport({ connectTimeout: 5000 });
   });
 
   afterEach(async () => {
@@ -120,5 +122,53 @@ describe('SSETransport', () => {
 
   it('should throw if not connected', async () => {
     await expect(transport.request('tools/list')).rejects.toThrow('not connected');
+  });
+
+  it('should use https for https:// URLs', async () => {
+    mockHttpsGet.mockImplementation((url: string, opts: unknown, cb: (res: { statusCode: number; on: ReturnType<typeof vi.fn> }) => void) => {
+      const res = makeMockRes({
+        onData: (handler: (chunk: Buffer) => void) => {
+          handler(Buffer.from('event: endpoint\ndata: /message\n'));
+        },
+        onEnd: () => {},
+      });
+      setTimeout(() => cb(res), 0);
+      return makeMockReq();
+    });
+
+    await transport.connect('https://secure-server.example.com/events');
+    expect(mockHttpsGet).toHaveBeenCalled();
+    expect(mockHttpGet).not.toHaveBeenCalled();
+    expect(transport.isConnected).toBe(true);
+  });
+
+  it('should send custom headers in POST requests', async () => {
+    mockHttpGet.mockImplementation((url: string, opts: unknown, cb: (res: { statusCode: number; on: ReturnType<typeof vi.fn> }) => void) => {
+      const res = makeMockRes({
+        onData: (handler: (chunk: Buffer) => void) => {
+          handler(Buffer.from('event: endpoint\ndata: /message\n'));
+        },
+        onEnd: () => {},
+      });
+      setTimeout(() => cb(res), 0);
+      return makeMockReq();
+    });
+    mockHttpRequest.mockImplementation(() => ({ on: vi.fn(), write: vi.fn(), end: vi.fn() }));
+
+    const authTransport = new SSETransport({
+      headers: { Authorization: 'Bearer secret-token' },
+    });
+
+    await authTransport.connect('http://localhost:3000/events');
+
+    const requestPromise = authTransport.request('tools/list');
+    // Disconnect to clean up the hanging request promise (SSE stream has ended in mock)
+    await authTransport.disconnect();
+    await requestPromise.catch(() => {});
+
+    expect(mockHttpRequest).toHaveBeenCalled();
+    const callArgs = mockHttpRequest.mock.calls[0];
+    const headers = (callArgs[1] as { headers: Record<string, string> }).headers;
+    expect(headers.Authorization).toBe('Bearer secret-token');
   });
 });

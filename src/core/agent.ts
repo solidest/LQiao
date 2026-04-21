@@ -26,6 +26,7 @@ export class Agent {
   #eventBus: EventBus;
   #sandbox?: Sandbox;
   #mcpClients: MCPClient[] = [];
+  #mcpInitialized = false;
 
   constructor(config: AgentConfig) {
     this.#config = {
@@ -51,22 +52,31 @@ export class Agent {
 
   /** Initialize MCP server connections and discover tools */
   async initializeMCP(): Promise<void> {
+    if (this.#mcpInitialized) return;
     const servers = this.#config.mcpServers;
-    if (!servers || servers.length === 0) return;
+    if (!servers || servers.length === 0) {
+      this.#mcpInitialized = true;
+      return;
+    }
 
     const clients = servers.map((cfg) => new MCPClientImpl(cfg));
+    await Promise.all(clients.map((c) => c.connect()));
 
     for (const client of clients) {
-      await client.connect();
       const tools = wrapMCPTools(client);
       this.#config.tools.push(...tools);
     }
 
     this.#mcpClients = clients;
+    this.#mcpInitialized = true;
   }
 
   /** Run a natural language task */
   async run(task: string): Promise<string> {
+    if (!this.#mcpInitialized) {
+      await this.initializeMCP();
+    }
+
     this.#eventBus.emit('beforeRun', { task });
 
     const model = modelRegistry.create(

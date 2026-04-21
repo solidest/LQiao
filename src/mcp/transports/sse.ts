@@ -3,38 +3,51 @@ import http from 'node:http';
 import https from 'node:https';
 import { URL } from 'node:url';
 
+/** Max buffer size for SSE stream parsing (8KB) */
+const MAX_BUFFER_SIZE = 8 * 1024;
+
 /**
  * SSE transport for MCP: communicates via HTTP Server-Sent Events.
  * Connects to MCP server's SSE endpoint for receiving messages,
  * POSTs requests back to the server's message endpoint.
  */
+export interface SSETransportConfig {
+  /** Connection timeout in milliseconds (default: 30s) */
+  connectTimeout?: number;
+  /** Optional HTTP headers for POST requests (e.g. auth tokens) */
+  headers?: Record<string, string>;
+}
+
 export class SSETransport extends EventEmitter {
   #messageUrl?: string;
   #abortController?: AbortController;
   #pending = new Map<number | string, { resolve: (value: unknown) => void; reject: (error: Error) => void }>();
   #id = 0;
-  #timeout: number;
+  #config: SSETransportConfig;
+  #streamEnded = false;
+  #streamEndedNormally = false;
 
-  constructor(timeoutMs = 30000) {
+  constructor(config?: SSETransportConfig) {
     super();
-    this.#timeout = timeoutMs;
+    this.#config = config ?? {};
   }
 
   async connect(url: string): Promise<void> {
     this.#abortController = new AbortController();
+    this.#streamEnded = false;
 
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => {
+      const connectTimer = setTimeout(() => {
         this.#abortController?.abort();
-        reject(new Error(`SSE connection timed out`));
-      }, this.#timeout);
+        reject(new Error('SSE connection timed out'));
+      }, this.#config.connectTimeout ?? 30000);
 
       const parsedUrl = new URL(url);
       const client = parsedUrl.protocol === 'https:' ? https : http;
 
       const req = client.get(url, { signal: this.#abortController?.signal }, (res) => {
         if (res.statusCode !== 200) {
-          clearTimeout(timer);
+          clearTimeout(connectTimer);
           reject(new Error(`SSE connection failed: HTTP ${res.statusCode}`));
           return;
         }
@@ -43,6 +56,10 @@ export class SSETransport extends EventEmitter {
 
         res.on('data', (chunk: Buffer) => {
           buffer += chunk.toString();
+          // Prevent unbounded buffer growth
+          if (buffer.length > MAX_BUFFER_SIZE) {
+            buffer = buffer.slice(-MAX_BUFFER_SIZE);
+          }
 
           while (true) {
             const idx = buffer.indexOf('\n');
@@ -54,7 +71,6 @@ export class SSETransport extends EventEmitter {
             if (line.startsWith('event: ')) {
               const eventType = line.slice(7).trim();
               if (eventType === 'endpoint') {
-                // Next data line contains the endpoint URL
                 const dataIdx = buffer.indexOf('\n');
                 if (dataIdx !== -1) {
                   const dataLine = buffer.slice(0, dataIdx);
@@ -92,17 +108,32 @@ export class SSETransport extends EventEmitter {
         });
 
         res.on('end', () => {
-          clearTimeout(timer);
+          clearTimeout(connectTimer);
           if (this.#messageUrl) {
+            this.#streamEndedNormally = true;
+            this.#streamEnded = true;
             resolve();
           } else {
+            this.#streamEnded = true;
             reject(new Error('SSE stream ended without endpoint'));
+          }
+        });
+
+        res.on('close', () => {
+          clearTimeout(connectTimer);
+          if (!this.#streamEndedNormally) {
+            this.#streamEnded = true;
+            for (const { reject: rej } of this.#pending.values()) {
+              rej(new Error('SSE stream closed'));
+            }
+            this.#pending.clear();
+            this.#messageUrl = undefined;
           }
         });
       });
 
       req.on('error', (err) => {
-        clearTimeout(timer);
+        clearTimeout(connectTimer);
         reject(err);
       });
     });
@@ -138,21 +169,22 @@ export class SSETransport extends EventEmitter {
       const parsedUrl = new URL(messageUrl);
       const client = parsedUrl.protocol === 'https:' ? https : http;
 
-      const req = client.request(messageUrl, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Content-Length': Buffer.byteLength(body),
-        },
-      }, (res) => {
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body).toString(),
+        ...this.#config.headers,
+      };
+
+      const req = client.request(messageUrl, { method: 'POST', headers }, (res) => {
         let data = '';
         res.on('data', (chunk: Buffer) => { data += chunk; });
         res.on('end', () => {
-          if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
-            // Response will come via SSE, not here
-          } else {
+          if (!res.statusCode || res.statusCode < 200 || res.statusCode >= 300) {
+            this.#pending.delete(id);
+            clearTimeout(timer);
             reject(new Error(`POST failed: HTTP ${res.statusCode} ${data}`));
           }
+          // On success, response arrives via SSE — no action needed here
         });
       });
 
@@ -170,10 +202,11 @@ export class SSETransport extends EventEmitter {
   async disconnect(): Promise<void> {
     this.#abortController?.abort();
     this.#abortController = undefined;
-    for (const { reject } of this.#pending.values()) {
-      reject(new Error('Transport disconnected'));
+    for (const { reject: rej } of this.#pending.values()) {
+      rej(new Error('Transport disconnected'));
     }
     this.#pending.clear();
+    this.#messageUrl = undefined;
   }
 
   get isConnected(): boolean {
