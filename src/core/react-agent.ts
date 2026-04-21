@@ -2,8 +2,10 @@ import type { Tool } from '../types/tool';
 import type { GenerateOptions, ModelResponse } from '../types/model';
 import type { EventBus } from '../types/event';
 import type { Sandbox } from '../security/sandbox';
+import type { BranchRule } from './branch-engine';
 import { ERROR_TYPES, LQiaoError } from '../types/error';
 import { withRetry } from '../utils/retry';
+import { evaluateBranch } from './branch-engine';
 
 /** Parsed action from model output */
 interface ParsedAction {
@@ -73,6 +75,37 @@ export class ReactAgent {
     generate: (prompt: string, options?: GenerateOptions) => Promise<ModelResponse>,
     task: string,
   ): Promise<string> {
+    return this.#runLoop(generate, task, () => '');
+  }
+
+  /**
+   * Run with conditional branching — tool results determine which steps to take next.
+   * @param generate Model generation function
+   * @param task The task/prompt
+   * @param branches Branch rules evaluated after each tool call
+   */
+  async runWithBranches(
+    generate: (prompt: string, options?: GenerateOptions) => Promise<ModelResponse>,
+    task: string,
+    branches: BranchRule[],
+  ): Promise<string> {
+    return this.#runLoop(generate, task, (result) => {
+      if (branches.length === 0) return '';
+      const decision = evaluateBranch(branches, result);
+      if (decision.steps.length > 0) {
+        return `Branch condition ${decision.matched ? 'matched' : 'not met'}. ` +
+          `Suggested steps: ${decision.steps.join(', ')}`;
+      }
+      return '';
+    });
+  }
+
+  /** Shared ReAct loop — used by both run() and runWithBranches() */
+  async #runLoop(
+    generate: (prompt: string, options?: GenerateOptions) => Promise<ModelResponse>,
+    task: string,
+    onToolResult: (result: import('../types/tool').ToolResult) => string,
+  ): Promise<string> {
     const history: string[] = [];
     const toolsDesc = Array.from(this.#tools.values())
       .map((t) => `- ${t.name}: ${t.description}`)
@@ -117,7 +150,11 @@ export class ReactAgent {
             ? JSON.stringify(result.data)
             : result.error ?? 'Unknown error';
           history.push(`Observation: ${observation}`);
-          prompt += `\n\n${response.text}\nObservation: ${observation}`;
+
+          const branchHint = onToolResult(result);
+          const hintPrefix = branchHint ? `\n\n${branchHint}` : '';
+
+          prompt += `\n\n${response.text}\nObservation: ${observation}${hintPrefix}`;
           this.#eventBus?.emit('onToolResult', { tool: parsed.action, result });
         } catch (e) {
           const msg = e instanceof Error ? e.message : String(e);

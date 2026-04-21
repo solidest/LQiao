@@ -19,6 +19,8 @@ export { ReactAgent } from './core/react-agent';
 export { CodeAgent } from './core/code-agent';
 export { SkillRegistry } from './core/skill-registry';
 export { loadSkills } from './core/skill-loader';
+export { evaluateBranch } from './core/branch-engine';
+export type { Condition, BranchRule, BranchDecision } from './core/branch-engine';
 
 // Model
 export { BaseModel } from './model/base';
@@ -41,7 +43,7 @@ export { Sandbox } from './security/sandbox';
 export { PermissionManager } from './security/permissions';
 export type { PermissionRule } from './security/permissions';
 export { AuditLog } from './security/audit';
-export type { AuditEntry } from './security/audit';
+export type { AuditEntry, AuditSummary } from './security/audit';
 
 // MCP
 export { MCPClient, MCP_EVENTS } from './mcp/client';
