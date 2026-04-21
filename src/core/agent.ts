@@ -224,4 +224,51 @@ export class Agent {
   getSkills(): Skill[] {
     return this.#skills.list();
   }
+
+  /** Add or replace a tool at runtime */
+  addTool(tool: Tool): void {
+    const idx = this.#config.tools.findIndex((t) => t.name === tool.name);
+    if (idx >= 0) {
+      this.#config.tools[idx] = tool;
+    } else {
+      this.#config.tools.push(tool);
+    }
+    this.#eventBus.emit('onToolRegistered', { name: tool.name });
+  }
+
+  /** Remove a tool by name */
+  removeTool(name: string): void {
+    const initialLen = this.#config.tools.length;
+    this.#config.tools = this.#config.tools.filter((t) => t.name !== name);
+    if (this.#config.tools.length < initialLen) {
+      this.#eventBus.emit('onToolRemoved', { name });
+    }
+  }
+
+  /** Update sandbox configuration at runtime */
+  updateSandbox(sandbox: Sandbox | boolean): void {
+    if (sandbox === false) {
+      this.#sandbox = undefined;
+      this.#config.sandbox = false;
+    } else if (sandbox === true) {
+      this.#sandbox = new SandboxImpl({});
+      this.#config.sandbox = true;
+    } else {
+      this.#sandbox = sandbox;
+      this.#config.sandbox = true;
+    }
+  }
+
+  /** Update partial agent config at runtime */
+  updateConfig(partial: Pick<AgentConfig, 'maxSteps' | 'maxRetries' | 'verbose'>): void {
+    if (partial.maxSteps != null) this.#config.maxSteps = partial.maxSteps;
+    if (partial.maxRetries != null) this.#config.maxRetries = partial.maxRetries;
+    if (partial.verbose != null) this.#config.verbose = partial.verbose;
+  }
+
+  /** Clear all tools from the agent */
+  clearTools(): void {
+    this.#config.tools = [];
+    this.#skillToolNames.clear();
+  }
 }
