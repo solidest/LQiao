@@ -3,10 +3,13 @@ import type { Tool } from '../types/tool';
 import type { GenerateOptions, ModelResponse, StreamChunk } from '../types/model';
 import type { EventHandler } from '../types/event';
 import type { Sandbox } from '../security/sandbox';
+import type { MCPClient } from '../mcp/client';
 import { DefaultEventBus } from './event-bus';
 import { ReactAgent } from './react-agent';
 import { modelRegistry } from '../model/registry';
 import { Sandbox as SandboxImpl } from '../security/sandbox';
+import { MCPClient as MCPClientImpl } from '../mcp/client';
+import { wrapMCPTools } from '../tools/mcp-tool';
 import { createModelError } from '../errors/base';
 import type { EventBus } from '../types/event';
 
@@ -14,19 +17,22 @@ import type { EventBus } from '../types/event';
  * Main Agent class — aggregates model, tools, security, and events.
  */
 export class Agent {
-  #config: Required<Omit<AgentConfig, 'apiKey' | 'sandbox'>> & {
+  #config: Required<Omit<AgentConfig, 'apiKey' | 'sandbox' | 'mcpServers'>> & {
     apiKey: string;
     sandbox: boolean | NonNullable<AgentConfig['sandbox']>;
+    mcpServers: AgentConfig['mcpServers'];
   };
 
   #eventBus: EventBus;
   #sandbox?: Sandbox;
+  #mcpClients: MCPClient[] = [];
 
   constructor(config: AgentConfig) {
     this.#config = {
       model: config.model,
       apiKey: config.apiKey ?? '',
       tools: config.tools ?? [],
+      mcpServers: config.mcpServers ?? [],
       sandbox: config.sandbox ?? false,
       maxSteps: config.maxSteps ?? 50,
       maxRetries: config.maxRetries ?? 3,
@@ -41,6 +47,22 @@ export class Agent {
         : {};
       this.#sandbox = new SandboxImpl(sandboxConfig);
     }
+  }
+
+  /** Initialize MCP server connections and discover tools */
+  async initializeMCP(): Promise<void> {
+    const servers = this.#config.mcpServers;
+    if (!servers || servers.length === 0) return;
+
+    const clients = servers.map((cfg) => new MCPClientImpl(cfg));
+
+    for (const client of clients) {
+      await client.connect();
+      const tools = wrapMCPTools(client);
+      this.#config.tools.push(...tools);
+    }
+
+    this.#mcpClients = clients;
   }
 
   /** Run a natural language task */
@@ -115,5 +137,16 @@ export class Agent {
   /** Get current config */
   get config(): Readonly<AgentConfig> & { apiKey: string } {
     return { ...this.#config };
+  }
+
+  /** Get MCP clients for advanced usage */
+  get mcpClients(): ReadonlyArray<MCPClient> {
+    return [...this.#mcpClients];
+  }
+
+  /** Disconnect all MCP clients */
+  async disconnectMCP(): Promise<void> {
+    await Promise.all(this.#mcpClients.map((c) => c.disconnect()));
+    this.#mcpClients = [];
   }
 }

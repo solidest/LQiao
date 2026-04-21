@@ -7,11 +7,12 @@ A lightweight, embeddable AI agent framework for TypeScript/JavaScript projects.
 - **ReAct Agent** — Thought → Action → Observation reasoning loop
 - **CodeAgent** — Code extraction and sandboxed execution
 - **Built-in Tools** — File (read/write/delete), Git (add/commit/push)
+- **MCP Client** — Connect to external MCP servers for remote tool discovery and execution
 - **Model Adapters** — OpenAI (GPT-3.5/4/4o), Anthropic (Claude 3.x)
 - **Sandbox Security** — File path restriction + VM code isolation
 - **Event System** — Wildcard-pattern event bus for observability
 - **Structured Logging** — JSON logs with levels and performance profiling
-- **Tiny** — ~7.5KB gzip, ~2ms cold start, zero `any` types
+- **Tiny** — ~44KB ESM, ~2ms cold start, zero `any` types
 
 ## Installation
 
@@ -327,6 +328,33 @@ const agent = new Agent({
 });
 ```
 
+### MCP Client (Remote Tools)
+
+```typescript
+import { Agent, FileTool } from 'lqiao';
+
+// Connect to MCP servers — discovered tools are automatically available to Agent
+const agent = new Agent({
+  model: 'gpt-4o',
+  apiKey: process.env.OPENAI_API_KEY!,
+  tools: [new FileTool()],
+  mcpServers: [
+    {
+      command: 'npx',
+      args: ['-y', '@modelcontextprotocol/server-filesystem', '/tmp'],
+      // transport: 'stdio',  // default
+      // timeout: 30000,      // connection timeout
+    },
+  ],
+});
+
+// MCP tools are auto-discovered and merged into Agent.tools
+// No extra code needed — Agent can call them naturally
+const result = await agent.run('Read the file /tmp/data.json and summarize its contents');
+```
+
+MCP tools are transparent to the Agent — they behave identically to local tools like FileTool and GitTool.
+
 ### Event Bus
 
 ```typescript
@@ -402,7 +430,8 @@ console.log(`Took ${timing.duration.toFixed(1)}ms`);
 │   Agent │ ReactAgent │ CodeAgent        │
 ├─────────────────────────────────────────┤
 │         Tool Layer                      │
-│   FileTool │ GitTool │ Custom Tools     │
+│   FileTool │ GitTool │ MCP Client       │
+│   └── Remote Tools (auto-discovered)    │
 ├─────────────────────────────────────────┤
 │         Model Layer                     │
 │   OpenAI │ Anthropic │ Registry         │
@@ -440,10 +469,10 @@ try {
 
 | Metric | Target | Current |
 |--------|--------|---------|
-| Cold start | < 100ms | ~2ms |
-| Bundle size | < 50KB gzip | ~7.5KB gzip |
+| Cold start | < 100ms | ~80ms |
+| Bundle size | < 50KB gzip | ~44KB ESM |
 | TypeScript | zero `any` | Achieved |
-| Test coverage | > 85% lines | 140 tests |
+| Test coverage | > 85% lines | 176 tests, 91% lines |
 
 ## License
 
