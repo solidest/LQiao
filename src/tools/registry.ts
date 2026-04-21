@@ -4,9 +4,11 @@ import type { Tool } from '../types/tool';
 export class ToolRegistry {
   #tools = new Map<string, Tool>();
   #onRegistered?: (tool: Tool) => void;
+  #onRemoved?: (name: string) => void;
 
-  constructor(options?: { onRegistered?: (tool: Tool) => void }) {
+  constructor(options?: { onRegistered?: (tool: Tool) => void; onRemoved?: (name: string) => void }) {
     this.#onRegistered = options?.onRegistered;
+    this.#onRemoved = options?.onRemoved;
   }
 
   /** Register a tool by its name */
@@ -43,6 +45,7 @@ export class ToolRegistry {
   /** Remove a tool by name */
   remove(name: string): void {
     this.#tools.delete(name);
+    this.#onRemoved?.(name);
   }
 
   /** Get the number of registered tools */

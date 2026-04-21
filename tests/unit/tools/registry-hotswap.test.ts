@@ -91,4 +91,26 @@ describe('ToolRegistry', () => {
 
     expect(callback).toHaveBeenCalledTimes(1);
   });
+
+  it('should call onRemoved callback when removing', () => {
+    const callback = vi.fn();
+    const reg = new ToolRegistry({ onRemoved: callback });
+    reg.register(createTool('test'));
+
+    reg.remove('test');
+
+    expect(callback).toHaveBeenCalledWith('test');
+  });
+
+  it('should call both onRegistered and onRemoved in combination', () => {
+    const onReg = vi.fn();
+    const onRem = vi.fn();
+    const reg = new ToolRegistry({ onRegistered: onReg, onRemoved: onRem });
+
+    reg.register(createTool('test'));
+    reg.remove('test');
+
+    expect(onReg).toHaveBeenCalledTimes(1);
+    expect(onRem).toHaveBeenCalledTimes(1);
+  });
 });

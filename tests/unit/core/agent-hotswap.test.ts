@@ -105,15 +105,91 @@ describe('Agent: Tool hotswap', () => {
     expect(namesAfter).not.toContain('skill-tool');
   });
 
-  it('should emit onToolRegistered when adding a tool', () => {
+  it('should emit onToolRegistered when adding a new tool', () => {
     const events: Array<{ event: string; data: unknown }> = [];
     const agent = createAgent();
 
     agent.on('onToolRegistered', (data: unknown) => events.push({ event: 'onToolRegistered', data }));
+    agent.on('onToolUpdated', (data: unknown) => events.push({ event: 'onToolUpdated', data }));
 
     agent.addTool(createTool('emit-tool'));
 
     expect(events.some((e) => e.event === 'onToolRegistered')).toBe(true);
+    expect(events.some((e) => e.event === 'onToolUpdated')).toBe(false);
+  });
+
+  it('should emit onToolUpdated when replacing an existing tool', () => {
+    const events: Array<{ event: string; data: unknown }> = [];
+    const agent = createAgent();
+
+    agent.on('onToolRegistered', (data: unknown) => events.push({ event: 'onToolRegistered', data }));
+    agent.on('onToolUpdated', (data: unknown) => events.push({ event: 'onToolUpdated', data }));
+
+    agent.addTool(createTool('replaceable'));
+    events.length = 0;
+
+    agent.addTool(createTool('replaceable'));
+
+    expect(events.some((e) => e.event === 'onToolUpdated')).toBe(true);
+    expect(events.some((e) => e.event === 'onToolRegistered')).toBe(false);
+  });
+
+  it('should clean #skillToolNames when removing a tool', () => {
+    const skillTool = createTool('skill-tool');
+    const agent = new Agent({
+      model: 'gpt-4o',
+      apiKey: 'test-key',
+      skills: [{
+        name: 'tool-skill',
+        description: 'Skill with tool',
+        prompt: 'Use the tool',
+        tools: [skillTool],
+      }],
+    });
+
+    agent.removeTool('skill-tool');
+
+    // After removing, enableSkill should not re-add the tool
+    agent.disableSkill('tool-skill');
+    agent.enableSkill('tool-skill');
+
+    const names = (agent.config.tools as Array<{ name: string }>).map((t) => t.name);
+    expect(names).not.toContain('skill-tool');
+  });
+
+  it('should clear all tools and disable skills', () => {
+    const skillTool = createTool('skill-tool');
+    const agent = new Agent({
+      model: 'gpt-4o',
+      apiKey: 'test-key',
+      skills: [{
+        name: 'tool-skill',
+        description: 'Skill with tool',
+        prompt: 'Use the tool',
+        tools: [skillTool],
+      }],
+    });
+
+    agent.addTool(createTool('standalone'));
+    agent.clearTools();
+
+    expect(agent.config.tools).toEqual([]);
+    const skills = agent.getSkills();
+    expect(skills.every((s) => !s.enabled)).toBe(true);
+  });
+
+  it('should restore original sandbox config on updateSandbox(true)', () => {
+    const agent = new Agent({
+      model: 'gpt-4o',
+      apiKey: 'test-key',
+      sandbox: { allowedPaths: ['/home'] },
+    });
+
+    agent.updateSandbox(false);
+    expect(agent.config.sandbox).toBe(false);
+
+    agent.updateSandbox(true);
+    expect(agent.config.sandbox).toBe(true);
   });
 
   it('should emit onToolRemoved when removing a tool', () => {
