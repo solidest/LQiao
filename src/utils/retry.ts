@@ -1,4 +1,5 @@
 import { ERROR_TYPES, LQiaoError } from '../types/error';
+import { createMaxRetriesError } from '../errors/base';
 
 export interface RetryOptions {
   /** Maximum retry attempts */
@@ -17,7 +18,7 @@ const DEFAULTS: Required<RetryOptions> = {
 
 /**
  * Execute a function with exponential backoff retry.
- * Only retries on transient errors (MODEL_ERROR, TIMEOUT).
+ * Only retries on transient errors (MODEL_ERROR, TIMEOUT, NETWORK_ERROR, RATE_LIMIT_ERROR).
  */
 export async function withRetry<T>(
   fn: () => Promise<T>,
@@ -32,6 +33,9 @@ export async function withRetry<T>(
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));
       if (!isRetryable(lastError) || attempt === maxRetries) {
+        if (attempt === maxRetries) {
+          throw createMaxRetriesError(lastError);
+        }
         throw lastError;
       }
       const delay = Math.min(baseDelay * 2 ** attempt, maxDelay);
@@ -39,7 +43,6 @@ export async function withRetry<T>(
     }
   }
 
-  // Unreachable — the loop always throws on the last attempt
   throw lastError!;
 }
 
@@ -47,7 +50,9 @@ function isRetryable(error: Error): boolean {
   if (error instanceof LQiaoError) {
     return (
       error.type === ERROR_TYPES.MODEL_ERROR ||
-      error.type === ERROR_TYPES.TIMEOUT
+      error.type === ERROR_TYPES.TIMEOUT ||
+      error.type === ERROR_TYPES.NETWORK_ERROR ||
+      error.type === ERROR_TYPES.RATE_LIMIT_ERROR
     );
   }
   // Network errors are generally retryable

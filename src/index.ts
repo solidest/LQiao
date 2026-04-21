@@ -6,7 +6,7 @@ export type { AgentEvent, EventHandler, EventBus } from './types/event';
 export type { ErrorType } from './types/error';
 
 // Errors
-export { LQiaoError, ERROR_TYPES, createModelError, createToolError, createSandboxError } from './errors/base';
+export { LQiaoError, ERROR_TYPES, createModelError, createToolError, createSandboxError, createNetworkError, createRateLimitError, createMaxRetriesError, NetworkError, RateLimitError, MaxRetriesError } from './errors/base';
 
 // Core
 export { Agent } from './core/agent';
