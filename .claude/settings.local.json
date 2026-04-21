@@ -1,0 +1,58 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git stash *)",
+      "Bash(git reset *)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)",
+      "Bash(git push *)",
+      "Bash(bun test *)",
+      "Bash(bun run *)",
+      "Bash(curl -s http://localhost:5173)",
+      "Bash(lsof -ti:3000)",
+      "Bash(xargs kill *)",
+      "Bash(curl -s http://localhost:3000/api/health)",
+      "Bash(lsof -ti:5173)",
+      "Bash(bunx vite *)",
+      "Bash(npx tsc *)",
+      "Bash(npm ls *)",
+      "Bash(bun install *)",
+      "Bash(netstat -ano)",
+      "Bash(findstr :3000)",
+      "Bash(bun add *)",
+      "Bash(npx vue-tsc *)",
+      "Bash(npx vite *)",
+      "Bash(pkill -f \"bun run\")",
+      "Bash(bun remove *)",
+      "Bash(curl -s http://localhost:3000/api/places?mode=markers)",
+      "Bash(curl -s http://localhost:3000/api/places?mode=grouped)",
+      "Bash(curl -s \"http://localhost:3000/api/media?page=1&pageSize=1\")",
+      "Bash(python3 -m json.tool)",
+      "Bash(sqlite3 data.db \"UPDATE media_assets SET city = '北京' WHERE id IN \\(SELECT id FROM media_assets LIMIT 1\\);\")",
+      "Bash(bun -e ' *)",
+      "Bash(curl -s \"http://localhost:3000/api/places?mode=grouped\")",
+      "Bash(curl -s \"http://localhost:3000/api/places?mode=markers\")"
+    ]
+  },
+  "permissionMode": "acceptAll",
+  "allowedTools": [
+    "Browser",
+    "Screenshot",
+    "Read",
+    "Write",
+    "Bash"
+  ],
+  "autoCompactContext": true,
+  "chromeIntegration": true,
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@latest",
+        "--browser",
+        "chromium",
+        "--headless=false"
+      ]
+    }
+  }
+}

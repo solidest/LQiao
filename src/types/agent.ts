@@ -1,7 +1,8 @@
 import type { Tool } from './tool';
+import type { MCPServerConfig } from './mcp';
 
 /** Supported model providers */
-export type ModelProvider = 'openai' | 'anthropic';
+export type ModelProvider = 'openai' | 'anthropic' | 'dashscope' | 'deepseek' | 'ollama';
 
 /** Agent configuration */
 export interface AgentConfig {
@@ -11,6 +12,8 @@ export interface AgentConfig {
   apiKey?: string;
   /** Tools available to the agent */
   tools?: Tool[];
+  /** MCP server configurations */
+  mcpServers?: MCPServerConfig[];
   /** Sandbox configuration */
   sandbox?: boolean | SandboxConfig;
   /** Maximum reasoning steps (default: 50) */
